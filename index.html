@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ForceDeck Firmware Updater</title>
+    <style>
+        * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        body { margin: 0; padding: 20px; background: #1a1a2e; color: #eee; min-height: 100vh; }
+        h1 { text-align: center; color: #00d4ff; margin-bottom: 5px; }
+        .subtitle { text-align: center; color: #888; margin-bottom: 20px; }
+        .version-badge { text-align: center; margin-bottom: 20px; }
+        .version-badge span { background: #00d4ff20; color: #00d4ff; padding: 6px 16px; border-radius: 20px; font-size: 14px; font-weight: 600; }
+        .warning { background: #ff6b3520; border: 1px solid #ff6b35; border-radius: 8px; padding: 15px; margin-bottom: 20px; text-align: center; max-width: 900px; margin-left: auto; margin-right: auto; display: none; }
+        .warning a { color: #ff6b35; }
+        .main-container { max-width: 1200px; margin: 0 auto; }
+        .steps-header { text-align: center; color: #888; margin-bottom: 20px; font-size: 15px; }
+        .device-grid { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; justify-content: center; }
+        .device-card { flex: 1; min-width: 280px; max-width: 360px; background: #252540; border-radius: 16px; padding: 24px; text-align: center; }
+        .device-card h2 { margin: 0 0 4px 0; font-size: 1.2em; }
+        .device-card.encoder h2 { color: #4caf50; }
+        .device-card.left h2 { color: #2196f3; }
+        .device-card.right h2 { color: #f44336; }
+        .device-role { color: #888; font-size: 12px; margin-bottom: 16px; }
+        .status-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 12px; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #555; }
+        .status-dot.connected { background: #4caf50; }
+        .status-text { font-size: 13px; color: #888; }
+        .chip-info { font-size: 11px; color: #666; min-height: 16px; margin-bottom: 8px; }
+        .mac-info { font-size: 11px; color: #00d4ff; font-family: monospace; min-height: 16px; margin-bottom: 12px; }
+        .btn { padding: 12px 24px; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; width: 100%; margin-bottom: 8px; transition: all 0.2s; }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-connect { background: #333; color: #eee; border: 1px solid #555; }
+        .btn-connect:hover:not(:disabled) { background: #444; }
+        .btn-connect.connected { background: #4caf5020; border-color: #4caf50; color: #4caf50; }
+        .btn-update { background: linear-gradient(135deg, #00d4ff, #0091ea); color: #fff; }
+        .btn-update:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 15px #00d4ff40; }
+        .btn-update.success { background: linear-gradient(135deg, #4caf50, #2e7d32); }
+        .progress { width: 100%; height: 6px; background: #1a1a2e; border-radius: 3px; overflow: hidden; margin-top: 8px; display: none; }
+        .progress-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #00d4ff, #84ffff); transition: width 0.3s; }
+        .console-section { background: #252540; border-radius: 16px; padding: 20px; max-width: 900px; margin: 0 auto 20px; }
+        .console-section h2 { margin: 0 0 10px 0; color: #888; font-size: 1em; }
+        #console { background: #0d0d1a; border-radius: 8px; padding: 15px; min-height: 200px; max-height: 350px; overflow-y: scroll; font-family: 'Monaco', 'Menlo', monospace; font-size: 11px; line-height: 1.4; white-space: pre-wrap; word-break: break-all; }
+        .instructions { background: #252540; border-radius: 16px; padding: 20px; max-width: 900px; margin: 0 auto 20px; }
+        .instructions h2 { color: #00d4ff; font-size: 1em; margin: 0 0 12px 0; }
+        .step { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+        .step-num { background: #00d4ff20; color: #00d4ff; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+        .step-text { color: #ccc; font-size: 14px; line-height: 28px; }
+        .checklist { max-width: 900px; margin: 0 auto 20px; }
+        .check-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #252540; border-radius: 10px; margin-bottom: 8px; transition: all 0.3s; }
+        .check-item.completed { background: #4caf5015; }
+        .check-icon { width: 24px; height: 24px; border-radius: 50%; border: 2px solid #444; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.3s; }
+        .check-item.completed .check-icon { background: #4caf50; border-color: #4caf50; }
+        .check-icon svg { opacity: 0; transition: opacity 0.3s; }
+        .check-item.completed .check-icon svg { opacity: 1; }
+        .check-label { font-size: 14px; }
+        @media (max-width: 768px) { .device-grid { flex-direction: column; align-items: center; } .device-card { max-width: 100%; } }
+    </style>
+</head>
+<body>
+    <h1>ForceDeck Firmware Updater</h1>
+    <div class="subtitle">Update your ForceDeck devices via USB</div>
+    <div class="version-badge"><span id="fwVersion">FW v3.7.8</span></div>
+
+    <div id="browserWarning" class="warning">
+        WebSerial not supported. Please use <a href="https://www.google.com/chrome/" target="_blank">Google Chrome</a> or Microsoft Edge.
+    </div>
+
+    <div class="main-container">
+        <div class="instructions">
+            <h2>How to Update</h2>
+            <div class="step"><div class="step-num">1</div><div class="step-text">Connect a ForceDeck device via USB-C cable</div></div>
+            <div class="step"><div class="step-num">2</div><div class="step-text">Click <b>Connect</b> and select the serial port</div></div>
+            <div class="step"><div class="step-num">3</div><div class="step-text">Click <b>Update Firmware</b> — takes ~30 seconds</div></div>
+            <div class="step"><div class="step-num">4</div><div class="step-text">Repeat for each device (Encoder, Left, Right)</div></div>
+        </div>
+
+        <div class="device-grid">
+            <div class="device-card encoder">
+                <h2>Encoder</h2>
+                <div class="device-role">Master device</div>
+                <div class="status-row">
+                    <div class="status-dot" id="encoderStatusDot"></div>
+                    <span class="status-text" id="encoderStatusText">Disconnected</span>
+                </div>
+                <div class="chip-info" id="encoderChipInfo"></div>
+                <div class="mac-info" id="encoderMacValue"></div>
+                <button class="btn btn-connect" id="encoderConnectBtn">Connect Encoder</button>
+                <button class="btn btn-update" id="encoderUpdateBtn" disabled>Update Firmware</button>
+                <div class="progress" id="encoderProgress"><div class="progress-bar" id="encoderProgressBar"></div></div>
+            </div>
+            <div class="device-card left">
+                <h2>Left Plate</h2>
+                <div class="device-role">Slave — Left force plate</div>
+                <div class="status-row">
+                    <div class="status-dot" id="leftStatusDot"></div>
+                    <span class="status-text" id="leftStatusText">Disconnected</span>
+                </div>
+                <div class="chip-info" id="leftChipInfo"></div>
+                <div class="mac-info" id="leftMacValue"></div>
+                <button class="btn btn-connect" id="leftConnectBtn">Connect Left</button>
+                <button class="btn btn-update" id="leftUpdateBtn" disabled>Update Firmware</button>
+                <div class="progress" id="leftProgress"><div class="progress-bar" id="leftProgressBar"></div></div>
+            </div>
+            <div class="device-card right">
+                <h2>Right Plate</h2>
+                <div class="device-role">Slave — Right force plate</div>
+                <div class="status-row">
+                    <div class="status-dot" id="rightStatusDot"></div>
+                    <span class="status-text" id="rightStatusText">Disconnected</span>
+                </div>
+                <div class="chip-info" id="rightChipInfo"></div>
+                <div class="mac-info" id="rightMacValue"></div>
+                <button class="btn btn-connect" id="rightConnectBtn">Connect Right</button>
+                <button class="btn btn-update" id="rightUpdateBtn" disabled>Update Firmware</button>
+                <div class="progress" id="rightProgress"><div class="progress-bar" id="rightProgressBar"></div></div>
+            </div>
+        </div>
+
+        <div class="checklist">
+            <div class="check-item" id="check-encoder">
+                <div class="check-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>
+                <span class="check-label">Encoder updated</span>
+            </div>
+            <div class="check-item" id="check-left">
+                <div class="check-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>
+                <span class="check-label">Left Plate updated</span>
+            </div>
+            <div class="check-item" id="check-right">
+                <div class="check-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>
+                <span class="check-label">Right Plate updated</span>
+            </div>
+        </div>
+
+        <div class="console-section">
+            <h2>Console</h2>
+            <div id="console"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { ESPLoader, Transport } from 'https://unpkg.com/esptool-js@0.5.7/bundle.js';
+
+        const FIRMWARE_BASE_URL = window.location.href.replace(/\/[^/]*$/, '') + '/firmware';
+        const BAUD_RATE = 921600;
+
+        const FLASH_FILES = [
+            { offset: 0x0,     file: 'bootloader.bin' },
+            { offset: 0x8000,  file: 'partition-table.bin' },
+            { offset: 0x10000, file: 'ota_data_initial.bin' },
+            { offset: 0x20000, file: 'forcedeck.bin' }
+        ];
+
+        const devices = {
+            encoder: { transport: null, esploader: null, connected: false, device: null, mac: null },
+            left:    { transport: null, esploader: null, connected: false, device: null, mac: null },
+            right:   { transport: null, esploader: null, connected: false, device: null, mac: null }
+        };
+
+        const consoleEl = document.getElementById('console');
+
+        if (!('serial' in navigator)) {
+            document.getElementById('browserWarning').style.display = 'block';
+            ['encoder', 'left', 'right'].forEach(d => {
+                document.getElementById(`${d}ConnectBtn`).disabled = true;
+            });
+        }
+
+        function log(msg, type = 'info') {
+            const time = new Date().toLocaleTimeString();
+            const prefix = { encoder: '[ENC] ', left: '[LEFT] ', right: '[RIGHT] ' }[type] || '';
+            consoleEl.textContent += `[${time}] ${prefix}${msg}\n`;
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+
+        function setProgress(deviceType, percent) {
+            const progress = document.getElementById(`${deviceType}Progress`);
+            const bar = document.getElementById(`${deviceType}ProgressBar`);
+            progress.style.display = 'block';
+            bar.style.width = `${percent}%`;
+        }
+
+        function hideProgress(deviceType) {
+            document.getElementById(`${deviceType}Progress`).style.display = 'none';
+            document.getElementById(`${deviceType}ProgressBar`).style.width = '0%';
+        }
+
+        function updateUI(deviceType) {
+            const dev = devices[deviceType];
+            const dot = document.getElementById(`${deviceType}StatusDot`);
+            const text = document.getElementById(`${deviceType}StatusText`);
+            const connectBtn = document.getElementById(`${deviceType}ConnectBtn`);
+            const updateBtn = document.getElementById(`${deviceType}UpdateBtn`);
+
+            if (dev.connected) {
+                dot.classList.add('connected');
+                text.textContent = 'Connected';
+                connectBtn.textContent = `Disconnect`;
+                connectBtn.classList.add('connected');
+                updateBtn.disabled = false;
+            } else {
+                dot.classList.remove('connected');
+                text.textContent = 'Disconnected';
+                const labels = { encoder: 'Encoder', left: 'Left', right: 'Right' };
+                connectBtn.textContent = `Connect ${labels[deviceType]}`;
+                connectBtn.classList.remove('connected');
+                updateBtn.disabled = true;
+                document.getElementById(`${deviceType}ChipInfo`).textContent = '';
+                document.getElementById(`${deviceType}MacValue`).textContent = '';
+            }
+        }
+
+        function createTerminal(deviceType) {
+            return {
+                clean() {},
+                writeLine(data) {
+                    log(data, deviceType);
+                    const macMatch = data.match(/MAC:\s*([0-9a-f:]{17})/i);
+                    if (macMatch) {
+                        devices[deviceType].mac = macMatch[1].toUpperCase();
+                        document.getElementById(`${deviceType}MacValue`).textContent = devices[deviceType].mac;
+                    }
+                },
+                write(data) {
+                    if (data && data.trim()) {
+                        consoleEl.textContent += data;
+                        consoleEl.scrollTop = consoleEl.scrollHeight;
+                        const macMatch = data.match(/MAC:\s*([0-9a-f:]{17})/i);
+                        if (macMatch) {
+                            devices[deviceType].mac = macMatch[1].toUpperCase();
+                            document.getElementById(`${deviceType}MacValue`).textContent = devices[deviceType].mac;
+                        }
+                    }
+                }
+            };
+        }
+
+        async function connect(deviceType) {
+            const dev = devices[deviceType];
+            try {
+                log('Requesting serial port...', deviceType);
+                dev.device = await navigator.serial.requestPort();
+                log('Connecting...', deviceType);
+                dev.transport = new Transport(dev.device, true);
+                dev.esploader = new ESPLoader({ transport: dev.transport, baudrate: BAUD_RATE, terminal: createTerminal(deviceType) });
+                log('Detecting chip...', deviceType);
+                await dev.esploader.main();
+                document.getElementById(`${deviceType}ChipInfo`).textContent = dev.esploader.chipName;
+                dev.connected = true;
+                updateUI(deviceType);
+                log('Connected!', deviceType);
+            } catch (error) {
+                log(`Error: ${error.message}`, deviceType);
+                dev.connected = false;
+                updateUI(deviceType);
+            }
+        }
+
+        async function disconnect(deviceType) {
+            const dev = devices[deviceType];
+            try {
+                if (dev.transport) await dev.transport.disconnect();
+                dev.connected = false;
+                dev.esploader = null;
+                dev.transport = null;
+                dev.device = null;
+                updateUI(deviceType);
+                log('Disconnected', deviceType);
+            } catch (error) {
+                log(`Disconnect error: ${error.message}`, deviceType);
+            }
+        }
+
+        async function downloadFile(url) {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Download failed: ${url}`);
+            const bytes = new Uint8Array(await response.arrayBuffer());
+            let bin = '';
+            for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+            return bin;
+        }
+
+        async function updateFirmware(deviceType) {
+            const dev = devices[deviceType];
+            if (!dev.connected || !dev.esploader) { log('Not connected!', deviceType); return; }
+
+            const updateBtn = document.getElementById(`${deviceType}UpdateBtn`);
+            const connectBtn = document.getElementById(`${deviceType}ConnectBtn`);
+            updateBtn.disabled = true;
+            connectBtn.disabled = true;
+
+            try {
+                log('\n========================================', deviceType);
+                log(`  UPDATING ${deviceType.toUpperCase()}`, deviceType);
+                log('========================================\n', deviceType);
+
+                log('Step 1/3: Erasing flash...', deviceType);
+                setProgress(deviceType, 5);
+                await dev.esploader.eraseFlash();
+                log('Erase complete!', deviceType);
+                setProgress(deviceType, 15);
+
+                log('Step 2/3: Downloading firmware...', deviceType);
+                const fileArray = [];
+                for (let i = 0; i < FLASH_FILES.length; i++) {
+                    const f = FLASH_FILES[i];
+                    log(`  ${f.file}...`, deviceType);
+                    const data = await downloadFile(`${FIRMWARE_BASE_URL}/${f.file}`);
+                    fileArray.push({ address: f.offset, data });
+                    log(`    OK (${Math.round(data.length / 1024)} KB)`, deviceType);
+                    setProgress(deviceType, 15 + (i + 1) / FLASH_FILES.length * 15);
+                }
+
+                log('Step 3/3: Flashing...', deviceType);
+                await dev.esploader.writeFlash({
+                    fileArray,
+                    flashSize: 'keep',
+                    flashMode: 'keep',
+                    flashFreq: 'keep',
+                    eraseAll: false,
+                    compress: true,
+                    reportProgress: (fileIndex, written, total) => {
+                        const pct = 30 + ((fileIndex + written / total) / fileArray.length * 70);
+                        setProgress(deviceType, pct);
+                    }
+                });
+
+                setProgress(deviceType, 100);
+                log('\n========================================', deviceType);
+                log(`  ${deviceType.toUpperCase()} UPDATE COMPLETE!`, deviceType);
+                log('========================================\n', deviceType);
+
+                updateBtn.textContent = 'Updated!';
+                updateBtn.classList.add('success');
+
+                setTimeout(() => hideProgress(deviceType), 3000);
+                await disconnect(deviceType);
+
+                const checkItem = document.getElementById(`check-${deviceType}`);
+                if (checkItem) checkItem.classList.add('completed');
+
+            } catch (error) {
+                log(`Error: ${error.message}`, deviceType);
+                hideProgress(deviceType);
+            }
+            updateBtn.disabled = false;
+            connectBtn.disabled = false;
+        }
+
+        // Event listeners
+        ['encoder', 'left', 'right'].forEach(d => {
+            document.getElementById(`${d}ConnectBtn`).addEventListener('click', () => {
+                devices[d].connected ? disconnect(d) : connect(d);
+            });
+            document.getElementById(`${d}UpdateBtn`).addEventListener('click', () => updateFirmware(d));
+        });
+    </script>
+</body>
+</html>
